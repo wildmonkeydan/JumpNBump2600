@@ -7,8 +7,22 @@
 
 ; CONSTANTS
 
+;NTSC = 1
+
+;	IF NTSC
+BKCOL = 79
+P2BCOL = $FE
+;	ELSE
+;BKCOL = #154
+;P2BCOL = $28
+;	ENDIF
+
+P1BCOL = $0E
+
 	seg		CONSTS
-	org		$00
+	org		$0
+
+
 
 ;Sprites
 
@@ -49,18 +63,22 @@ GravityForce	= %11111100	;-12
 ; Velocity(Vertical Fixed 4:4) - 1 Byte
 ; Position - 2 Bytes
 ; State - 1 Byte
+; Score - 1 Byte
 
 B0_VelY			.byte
 B0_PosX			.byte
 B0_PosY			.byte
 B0_State		.byte
+B0_Score		.byte
 
 B1_VelY			.byte
 B1_PosX			.byte
 B1_PosY			.byte
 B1_State		.byte
+B1_Score		.byte
 
 CurrentBPtr		.word
+CurrentBunny	.byte
 
 Joystick		.byte			;stores joystick directions
 Button			.byte			;stores button state
@@ -73,13 +91,13 @@ Workspace		.byte			;for random calculations that need some memory
 Start
 	CLEAN_START
 
-	lda 	$00
-	sta 	COLUBK  			;black background 	
-	lda 	$22    
-	sta 	COLUPF  			;set playfield colour
-	lda 	$0E
+	lda 	BKCOL
+	sta 	COLUBK  			;set blackground 	
+	;lda 	$22    
+	;sta 	COLUPF  			;set playfield colour
+	lda 	P1BCOL
 	sta 	COLUP0				;set player0 colour
-	lda 	$2A
+	lda 	P2BCOL
 	sta 	COLUP1				;set player1 colour
 
 ;MainLoop starts with usual VBLANK code,
@@ -88,7 +106,11 @@ MainLoop
 	VERTICAL_SYNC
 	lda #15		
 	sta TIM64T
-	
+	lda #<B0_PosX
+	ldx #>B0_PosX
+	sta CurrentBPtr
+	sta CurrentBPtr + 1
+
 UpdatePlayer
 	lda		SWCHA
 	lsr
@@ -183,9 +205,16 @@ NegativeVelocity
 
 CollisionCheck
 	bit 	CXPPMM				;bit check P0-P1 collsion - N flag should equal colision bit
-	bne		WaitForVblankEnd
 
-
+	sta CurrentBunny
+	bne	WaitForVblankEnd	
+	
+	ldx #>B1_PosX
+	lda #<B1_PosX
+	sta CurrentBPtr + 1
+	sta CurrentBPtr
+	inc CurrentBunny
+	jmp UpdatePlayer
 
 WaitForVblankEnd
 	lda 	INTIM	
@@ -216,7 +245,7 @@ scanlinesPerTitlePixel = #6
 TitlePreLoop
 ; we color the pre title area
 	sta WSYNC
-	stx COLUBK
+	;stx COLUBK
 	inx 	
 	dey
 	bne TitlePreLoop
@@ -317,6 +346,10 @@ TitlePostLoop
 	lda #2		
 	sta VBLANK 	
 	ldx #30		
+	lda #0
+	sta CurrentBunny
+	lda #157
+	sta COLUBK
 OverScanWait
 	sta WSYNC
 	dex

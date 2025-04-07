@@ -1,0 +1,102 @@
+--- Symbol List (sorted by symbol)
+0.drawlogo               f0b6              (R )
+0.FREE_BYTES             0000                  
+1.VSLP1                  f002              (R )
+2.CYCLES                 0002              (R )
+3.CYCLES                 000a              (R )
+AUDC0                    0015                  
+AUDC1                    0016                  
+AUDF0                    0017                  
+AUDF1                    0018                  
+AUDV0                    0019                  
+AUDV1                    001a                  
+COLUBK                   0009                  
+COLUP0                   0006              (R )
+COLUP1                   0007              (R )
+COLUPF                   0008              (R )
+CTRLPF                   000a                  
+CXBLPF                   0006                  
+CXCLR                    002c                  
+CXM0FB                   0004                  
+CXM0P                    0000                  
+CXM1FB                   0005                  
+CXM1P                    0001                  
+CXP0FB                   0002                  
+CXP1FB                   0003                  
+CXPPMM                   0007                  
+ENABL                    001f                  
+ENAM0                    001d                  
+ENAM1                    001e                  
+GRP0                     001b              (R )
+GRP1                     001c              (R )
+HMBL                     0024                  
+HMCLR                    002b                  
+HMM0                     0022                  
+HMM1                     0023                  
+HMOVE                    002a              (R )
+HMP0                     0020              (R )
+HMP1                     0021              (R )
+INPT0                    0008                  
+INPT1                    0009                  
+INPT2                    000a                  
+INPT3                    000b                  
+INPT4                    000c                  
+INPT5                    000d                  
+INTIM                    0284              (R )
+logo_0                   f0be              (R )
+logo_1                   f109              (R )
+logo_2                   f154              (R )
+logo_3                   f19f              (R )
+logo_4                   f1ea              (R )
+logo_5                   f235              (R )
+logo_color               0000 ????         (R )
+logo_colors              f280              (R )
+logo_height              0000 ????         (R )
+logo_kernel_size         0038                  
+LogoFrame                f000              (R )
+LogoGap                  f09e              (R )
+LogoLoop                 f05a              (R )
+LogoOverscanStart        f0a3                  
+LogoVisibleScreen        f049              (R )
+LogoWaitVBlank           f03c              (R )
+macro.h                  0000 ????         (R )
+NO_ILLEGAL_OPCODES       0000 ????         (R )
+NUSIZ0                   0004              (R )
+NUSIZ1                   0005              (R )
+PF0                      000d                  
+PF1                      000e                  
+PF2                      000f                  
+REFP0                    000b                  
+REFP1                    000c                  
+RESBL                    0014                  
+RESM0                    0012                  
+RESM1                    0013                  
+RESMP0                   0028                  
+RESMP1                   0029                  
+RESP0                    0010              (R )
+RESP1                    0011              (R )
+RSYNC                    0003                  
+SWACNT                   0281                  
+SWBCNT                   0283                  
+SWCHA                    0280                  
+SWCHB                    0282                  
+T1024T                   0297                  
+temp1                    0000 ????         (R )
+temp2                    0000 ????         (R )
+TIA_BASE_ADDRESS         0000              (R )
+TIA_BASE_READ_ADDRESS    0000              (R )
+TIA_BASE_WRITE_ADDRESS   0000              (R )
+TIM1T                    0294                  
+TIM64T                   0296              (R )
+TIM8T                    0295                  
+TIMINT                   0285                  
+VBLANK                   0001              (R )
+vcs.h                    0000 ????         (R )
+VDELBL                   0027                  
+VDELP0                   0025              (R )
+VDELP1                   0026              (R )
+VERSION_MACRO            006d                  
+VERSION_VCS              006a                  
+VSYNC                    0000              (R )
+WSYNC                    0002              (R )
+--- End of Symbol List.
