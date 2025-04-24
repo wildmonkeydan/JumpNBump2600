@@ -7,35 +7,20 @@
 
 ; CONSTANTS
 
-;NTSC = 1
+NTSC = 1
 
-;	IF NTSC
+	IF NTSC
 BKCOL = 79
 P2BCOL = $FE
-;	ELSE
-;BKCOL = #154
-;P2BCOL = $28
-;	ENDIF
+	ELSE
+BKCOL = #154
+P2BCOL = $28
+	ENDIF
 
 P1BCOL = $0E
 
-	seg		CONSTS
-	org		$0
+ScreenHeight = #98
 
-
-
-;Sprites
-
-BunnySprite:
-	.byte %01111110 ;
-	.byte %00101111 ;
-	.byte %00111110 ;
-	.byte %11111100 ;
-	.byte %10110000 ;
-	.byte %01111000 ;
-	.byte %00011100 ;
-	.byte %00001100 ;
-; --- end ----
 
 NegativeMask	= %10000000
 
@@ -56,7 +41,7 @@ BunnyDeathMask	= %00000010
 JumpForce		= 64
 GravityForce	= %11111100	;-12
 
-	seg	   	RAM
+	seg.u	   	RAM
     org     $80
 
 ; Bunny Struct (5 Bytes)
@@ -64,20 +49,29 @@ GravityForce	= %11111100	;-12
 ; Position - 2 Bytes
 ; State - 1 Byte
 ; Score - 1 Byte
+; Draw - 1 Byte
 
 B0_VelY			.byte
-B0_PosX			.byte
-B0_PosY			.byte
-B0_State		.byte
-B0_Score		.byte
-
 B1_VelY			.byte
+
+B0_PosX			.byte
 B1_PosX			.byte
+
+B0_PosY			.byte
 B1_PosY			.byte
+
+B0_State		.byte
 B1_State		.byte
+
+B0_Score		.byte
 B1_Score		.byte
 
-CurrentBPtr		.word
+B0_Draw			.byte
+B1_Draw			.byte
+
+B0_SprtPtr		.word
+B1_SprtPtr		.word
+
 CurrentBunny	.byte
 
 Joystick		.byte			;stores joystick directions
@@ -99,6 +93,12 @@ Start
 	sta 	COLUP0				;set player0 colour
 	lda 	P2BCOL
 	sta 	COLUP1				;set player1 colour
+	lda		#40
+	sta		B0_PosX
+	lda 	#40
+	sta		B0_PosY
+	;sta		RESP0
+	;sta		RESP1
 
 ;MainLoop starts with usual VBLANK code,
 ;and the usual timer seeding
@@ -106,21 +106,12 @@ MainLoop
 	VERTICAL_SYNC
 	lda #15		
 	sta TIM64T
-	lda #<B0_PosX
-	ldx #>B0_PosX
-	sta CurrentBPtr
-	sta CurrentBPtr + 1
 
 UpdatePlayer
 	lda		SWCHA
-	lsr
-	lsr
 	sta		Joystick			;load joystick state - cut off up and down as we don't need it
 
-	ldx		#3
-	lda		CurrentBPtr,x		;check if player 1, if the bunny is then shift the bits appropriately
-	eor		#BunnyJoyMask
-	and		#BunnyJoyMask
+	ldx		CurrentBunny
 	bne		ReadJoystick2Button
 
 Joystick1Shifting
@@ -145,11 +136,15 @@ ReadJoystick2Button
     sta    	Button
 
 CalculateVelocity
-	ldx 	#1
-	ldy 	CurrentBPtr,x		;load PosX into a
+	ldy 	B0_PosX,x		;load PosX into a
+	lda 	Joystick
+	lsr
+	lsr
 
 CheckLeft
 	lda		Joystick			;check if left is pressed
+	lsr
+	lsr
 	lsr
 	bcs		CheckRight
 
@@ -159,21 +154,20 @@ CheckRight
 	lda		Joystick			;check if right is pressed
 	bcs 	CheckButton
 
-	iny							;x++
+	;iny							;x++
 
 CheckButton
-	sty		CurrentBPtr,x		;store modified x coord
+	sty		B0_PosX,x		;store modified x coord
 	lda 	#0
-	ldx		#0
 	cmp 	Button
 	beq		ApplyVelocity		;check if button pressed
 
-	lda		CurrentBPtr,x
+	lda		B0_VelY,x
 	adc		JumpForce
-	sta		CurrentBPtr,x
+	sta		B0_VelY,x
 
 ApplyVelocity
-	lda		CurrentBPtr,x
+	lda		B0_VelY,x
 	sta		Workspace
 	bit		Workspace
 	beq		NegativeVelocity
@@ -183,10 +177,9 @@ PositiveVeloicty
 	lsr
 	lsr
 
-	ldx		#2
-	lda		CurrentBPtr,x
+	lda		B0_PosY,x
 	adc		Workspace
-	sta		CurrentBPtr,x
+	sta		B0_PosY,x
 	jmp		CollisionCheck
 
 NegativeVelocity
@@ -198,25 +191,51 @@ NegativeVelocity
 	lsr
 	lsr
 
-	ldx		#2
-	lda		CurrentBPtr,x
+	ldx		CurrentBunny
+	lda		B0_PosY,x
 	sbc		Workspace
-	sta		CurrentBPtr,x
+	sta		B0_PosY,x
 
 CollisionCheck
 	bit 	CXPPMM				;bit check P0-P1 collsion - N flag should equal colision bit
 
-	sta CurrentBunny
-	bne	WaitForVblankEnd	
+	lda 	CurrentBunny
+	bne		PrepDraw	
 	
-	ldx #>B1_PosX
-	lda #<B1_PosX
-	sta CurrentBPtr + 1
-	sta CurrentBPtr
-	inc CurrentBunny
-	jmp UpdatePlayer
+	inc 	CurrentBunny
+	jmp 	UpdatePlayer
+
+	; Taken from Darrell Spice's Let's Make a Game! Step 4 (https://www.randomterrain.com/atari-2600-lets-make-a-game-spiceware-04.html)
+PrepDraw
+	lda		#(ScreenHeight + BunnyHeight)
+	sec
+	sbc		B0_PosY
+	sta		B0_Draw
+
+	lda		#<(BunnySprite + BunnyHeight - 1)
+	sec
+	sbc		B0_PosY
+	sta		B0_SprtPtr
+	lda		#>(BunnySprite + BunnyHeight - 1)
+	sbc		#0
+	sta		B0_SprtPtr + 1
+
+	lda		#(ScreenHeight + BunnyHeight)
+	sec
+	sbc		B1_PosY
+	sta		B1_Draw
+
+	lda		#<(BunnySprite + BunnyHeight - 1)
+	sec
+	sbc		B1_PosY
+	sta		B1_SprtPtr
+	lda		#>(BunnySprite + BunnyHeight - 1)
+	sbc		#0
+	sta		B1_SprtPtr + 1
 
 WaitForVblankEnd
+	lda 	#0
+	sta		CurrentBunny
 	lda 	INTIM	
 	bne 	WaitForVblankEnd	
 	sta 	VBLANK  	
@@ -239,143 +258,203 @@ scanlinesPerTitlePixel = #6
 
 
 ;just burning scanlines....you could do something else
-	ldx #40
-	ldy #57
+	;sta 	RESP0
+	;sta 	RESP1
 
-TitlePreLoop
-; we color the pre title area
-	sta WSYNC
-	;stx COLUBK
-	inx 	
-	dey
-	bne TitlePreLoop
+	IF NTSC
 
+	ELSE
 
-	lda #00 		; reset background color
-	sta COLUBK
-	sta WSYNC 		; create some padding
-	sta WSYNC
-	sta WSYNC
-
-
-;
-;the next part is careful cycle counting from those 
-;who have gone before me....
-	
-; Ball code
-	lda #150			; set ball color
-	sta COLUPF 
-	lda #%0101000		; set ball stretch
-	sta CTRLPF
-
-	lda #%00000010		; enable the ball
-	sta ENABL
-	sta WSYNC 			; not elegan to set the ball thinkness :)
-	sta WSYNC
-	sta WSYNC
-
-; move the ball!
-	lda #10
-	ldx #4 				; Ball sprite id for SetHozPos subroutine
-	jsr SetHorizPos
-	sta WSYNC
-	sta HMOVE
-	sleep 15
-	lda #%00000000		; disable the ball 
-	sta ENABL
-
-	ldx #pixelHeightOfTitle ; X will hold what letter pixel we're on
-	ldy #scanlinesPerTitlePixel ; Y will hold which scan line we're on for each pixel
-
-	lda #45   
-	sta COLUPF 
-
-TitleShowLoop	
-	sta WSYNC
-	lda PFData0Left-1,X           ;[0]+4
-	sta PF0                 ;[4]+3 = *7*   < 23	;PF0 visible
-	lda PFData1Left-1,X           ;[7]+4
-	sta PF1                 ;[11]+3 = *14*  < 29	;PF1 visible
-	lda PFData2Left-1,X           ;[14]+4
-	sta PF2                 ;[18]+3 = *21*  < 40	;PF2 visible
-	nop			;[21]+2
-	nop			;[23]+2
-	nop			;[25]+2
-	;six cycles available  Might be able to do something here
-	lda PFData0Right-1,X          ;[27]+4
-	;PF0 no longer visible, safe to rewrite
-	sta PF0                 ;[31]+3 = *34* 
-	lda PFData1Right-1,X		;[34]+4
-	;PF1 no longer visible, safe to rewrite
-	sta PF1			;[38]+3 = *41*  
-	lda PFData2Right-1,X		;[41]+4
-	;PF2 rewrite must begin at exactly cycle 45!!, no more, no less
-	sta PF2			;[45]+2 = *47*  ; >
-	 
-	dey ;ok, we've drawn one more scaneline for this 'pixel'
-	bne NotChangingWhatTitlePixel ;go to not changing if we still have more to do for this pixel
-	dex ; we *are* changing what title pixel we're on...
-
-	beq DoneWithTitle ; ...unless we're done, of course
-	
-	ldy #scanlinesPerTitlePixel ;...so load up Y with the count of how many scanlines for THIS pixel...
-
-NotChangingWhatTitlePixel
-	
-	jmp TitleShowLoop
-
-DoneWithTitle	
-	
-	;clear out the playfield registers for obvious reasons	
-	lda #0
-	sta PF2 ;clear out PF2 first, I found out through experience
-	sta PF0
-	sta PF1
-
-;just burning scanlines....you could do something else
-	ldy #137
-	ldx #100 		; 40 + 60 (pretitle lines) so we start from the last color
-TitlePostLoop
-	sta WSYNC
-	stx COLUBK
-	inx 
-	dey
-	bne TitlePostLoop
-
-; usual vblank
-	lda #2		
-	sta VBLANK 	
-	ldx #30		
-	lda #0
-	sta CurrentBunny
-	lda #157
-	sta COLUBK
-OverScanWait
-	sta WSYNC
+	ldx		#50
+PALSky
+	sta		WSYNC
 	dex
-	bne OverScanWait
+	bne		PALSky
+
+	ENDIF
+
+	ldx 	#0
+
+	ldy 	#98
+ScreenLoop
+	lda 	BunnyHeight-1
+	dcp		B0_Draw
+	bcs		DoDrawP1
+	lda		#0
+	.byte 	$2C
+
+DoDrawP1
+	lda		(B0_SprtPtr),y
+	sta 	WSYNC
+; Line 1 ----------------------------------------------
+	sta		GRP0
+	ldx		%11111111
+	stx		PF0
+	lda		#BunnyHeight-1
+	dcp		B1_Draw
+	bcs		DoDrawP2
+	lda		#0
+	.byte	$2C
+
+DoDrawP2
+	lda		(B1_SprtPtr),y
+	sta 	WSYNC
+; Line 2 ----------------------------------------------
+	sta		GRP1
+	ldx		#0
+	stx		PF0
+	dey
+	bpl		ScreenLoop
+
+; /* TitlePreLoop
+; ; we color the pre title area
+; 	sta WSYNC
+; 	lda		BunnySprite,x
+; 	sta		GRP0
+; 	;stx COLUBK
+; 	inx 	
+; 	dey
+; 	bne TitlePreLoop
+
+
+; 	;lda #00 		; reset background color
+; 	;sta COLUBK
+; 	sta WSYNC 		; create some padding
+; 	sta WSYNC
+; 	sta WSYNC
+
+
+; ;
+; ;the next part is careful cycle counting from those 
+; ;who have gone before me....
+	
+; ; Ball code
+; 	lda #150			; set ball color
+; 	sta COLUPF 
+; 	lda #%0101000		; set ball stretch
+; 	sta CTRLPF
+
+; 	lda #%00000010		; enable the ball
+; 	sta ENABL
+; 	sta WSYNC 			; not elegan to set the ball thinkness :)
+; 	sta WSYNC
+; 	sta WSYNC
+
+; ; move the ball!
+; 	lda #10
+; 	ldx #4 				; Ball sprite id for SetHozPos subroutine
+; 	jsr SetHorizPos
+; 	sta WSYNC
+; 	sta HMOVE
+; 	sleep 15
+; 	lda #%00000000		; disable the ball 
+; 	sta ENABL
+
+; 	ldx #pixelHeightOfTitle ; X will hold what letter pixel we're on
+; 	ldy #scanlinesPerTitlePixel ; Y will hold which scan line we're on for each pixel
+
+; 	lda #45   
+; 	sta COLUPF 
+
+; TitleShowLoop	
+; 	sta WSYNC
+; 	lda PFData0Left-1,X           ;[0]+4
+; 	sta PF0                 ;[4]+3 = *7*   < 23	;PF0 visible
+; 	lda PFData1Left-1,X           ;[7]+4
+; 	sta PF1                 ;[11]+3 = *14*  < 29	;PF1 visible
+; 	lda PFData2Left-1,X           ;[14]+4
+; 	sta PF2                 ;[18]+3 = *21*  < 40	;PF2 visible
+; 	nop			;[21]+2
+; 	nop			;[23]+2
+; 	nop			;[25]+2
+; 	;six cycles available  Might be able to do something here
+; 	lda PFData0Right-1,X          ;[27]+4
+; 	;PF0 no longer visible, safe to rewrite
+; 	sta PF0                 ;[31]+3 = *34* 
+; 	lda PFData1Right-1,X		;[34]+4
+; 	;PF1 no longer visible, safe to rewrite
+; 	sta PF1			;[38]+3 = *41*  
+; 	lda PFData2Right-1,X		;[41]+4
+; 	;PF2 rewrite must begin at exactly cycle 45!!, no more, no less
+; 	sta PF2			;[45]+2 = *47*  ; >
+	 
+; 	dey ;ok, we've drawn one more scaneline for this 'pixel'
+; 	bne NotChangingWhatTitlePixel ;go to not changing if we still have more to do for this pixel
+; 	dex ; we *are* changing what title pixel we're on...
+
+; 	beq DoneWithTitle ; ...unless we're done, of course
+	
+; 	ldy #scanlinesPerTitlePixel ;...so load up Y with the count of how many scanlines for THIS pixel...
+
+; NotChangingWhatTitlePixel
+	
+; 	jmp TitleShowLoop
+
+; DoneWithTitle	
+	
+; 	;clear out the playfield registers for obvious reasons	
+; 	lda #0
+; 	sta PF2 ;clear out PF2 first, I found out through experience
+; 	sta PF0
+; 	sta PF1
+
+; ;just burning scanlines....you could do something else
+; 	ldy #137
+; 	ldx #100 		; 40 + 60 (pretitle lines) so we start from the last color
+; TitlePostLoop
+; 	sta WSYNC
+; 	stx COLUBK
+; 	inx 
+; 	dey
+; 	bne TitlePostLoop
+
+ ; usual vblank
+ 	lda #2		
+ 	sta VBLANK 	
+ 	ldx #30		
+ 	lda #0
+ 	sta CurrentBunny
+ 	lda #157
+ 	sta COLUBK
+OverScanWait
+	sta 	WSYNC
+	dex
+	bne	 OverScanWait
 	jmp  MainLoop      
 
-; Subroutine to move horizontally a sprite  
-SetHorizPos 
-	sta WSYNC		; start a new line
-	bit 0
-	bit 0			; waste 6 cycles for tuning object speed
-	sec				; set carry flag
-DivideLoop
-	sbc #50			; this value determines the direction of motion, 35 is steady
-	bcs DivideLoop	; branch until negative
-	eor #7			; calculate fine offset
-	asl
-	asl
-	asl
-	asl
-	sta HMP0,x	; set fine offset
-	rts		; return to calle
+; ; Subroutine to move horizontally a sprite  
+; SetHorizPos 
+; 	sta WSYNC		; start a new line
+; 	bit 0
+; 	bit 0			; waste 6 cycles for tuning object speed
+; 	sec				; set carry flag
+; DivideLoop
+; 	sbc #50			; this value determines the direction of motion, 35 is steady
+; 	bcs DivideLoop	; branch until negative
+; 	eor #7			; calculate fine offset
+; 	asl
+; 	asl
+; 	asl
+; 	asl
+; 	sta HMP0,x	; set fine offset
+; 	rts		; return to calle
 ;
 ; the graphics for Kynetics title 
 ; PlayfieldPal at https://alienbill.com/2600/playfieldpal.html
 ; to draw these things. Just rename them left and right
+
+;Sprites
+BunnySprite:
+	.byte %01111110 ;
+	.byte %00101111 ;
+	.byte %00111110 ;
+	.byte %11111100 ;
+	.byte %10110000 ;
+	.byte %01111000 ;
+	.byte %00011100 ;
+	.byte %00001100 ;
+; --- end ----
+BunnyHeight		= * - BunnySprite
 
 PFData0Left
         .byte #%00000000
@@ -398,14 +477,14 @@ PFData1Left
         .byte #%00000000
 
 PFData2Left
-        .byte #%00000000
-        .byte #%01100101
-        .byte #%00010101
-        .byte #%01010101
-        .byte #%00010111
-        .byte #%01100001
-        .byte #%00000000
-        .byte #%00000000
+        .byte %01111110 ;
+		.byte %00101111 ;
+		.byte %00111110 ;
+		.byte %11111100 ;
+		.byte %10110000 ;
+		.byte %01111000 ;
+		.byte %00011100 ;
+		.byte %00001100 
 
 PFData0Right
         .byte #%00000000
@@ -438,7 +517,7 @@ PFData2Right
         .byte #%00000000
 
 
-
-	org $FFFC
+	org $FFFA
+	.word Start
 	.word Start
 	.word Start
