@@ -82,6 +82,41 @@ Workspace		.byte			;for random calculations that need some memory
 	seg 	CODE
 	org 	$F000, 0
 
+fineAdjustBegin
+            DC.B %01110000; Left 7 
+
+            DC.B %01100000; Left 6
+
+            DC.B %01010000; Left 5
+
+            DC.B %01000000; Left 4
+
+            DC.B %00110000; Left 3
+
+            DC.B %00100000; Left 2
+
+            DC.B %00010000; Left 1
+
+            DC.B %00000000; No movement.
+
+            DC.B %11110000; Right 1
+
+            DC.B %11100000; Right 2
+
+            DC.B %11010000; Right 3
+
+            DC.B %11000000; Right 4
+
+            DC.B %10110000; Right 5
+
+            DC.B %10100000; Right 6
+
+            DC.B %10010000; Right 7
+
+
+
+fineAdjustTable EQU fineAdjustBegin - %11110001; NOTE: %11110001 = -15
+
 Start
 	CLEAN_START
 
@@ -152,9 +187,13 @@ CheckLeft
 
 CheckRight
 	lda		Joystick			;check if right is pressed
+	lsr
+	lsr
+	lsr
+	lsr
 	bcs 	CheckButton
 
-	;iny							;x++
+	iny							;x++
 
 CheckButton
 	sty		B0_PosX,x		;store modified x coord
@@ -193,7 +232,7 @@ NegativeVelocity
 
 	ldx		CurrentBunny
 	lda		B0_PosY,x
-	sbc		Workspace
+	;sbc		Workspace
 	sta		B0_PosY,x
 
 CollisionCheck
@@ -232,6 +271,14 @@ PrepDraw
 	lda		#>(BunnySprite + BunnyHeight - 1)
 	sbc		#0
 	sta		B1_SprtPtr + 1
+
+	lda		B0_PosX
+	ldx		#0
+	jsr		PrePosObject
+
+	lda		B0_PosY
+	inx
+	jsr		PrePosObject
 
 WaitForVblankEnd
 	lda 	#0
@@ -286,10 +333,30 @@ ScreenLoop
 DoDrawP1
 	lda		(B0_SprtPtr),y
 	sta 	WSYNC
+	;sta		HMOVE
 ; Line 1 ----------------------------------------------
 	sta		GRP0
-	ldx		%11111111
-	stx		PF0
+	;ldx		%11111111
+	;stx		PF0
+
+	sty		Workspace
+	lda		B0_PosX
+	;ldx		#0
+	sec                      ; 02     Set the carry flag so no borrow will be
+								;        applied during the division.
+
+divideby15a sbc #15                  ; 04     Waste the necessary amount of time
+								;        dividing X-pos by 15!
+
+	bcs divideby15a          ; 06/07  11/16/21/26/31/36/41/46/51/56/61/66
+	tay
+
+	lda fineAdjustTable,y    ; 13 -> Consume 5 cycles by guaranteeing we
+								;       cross a page boundary
+
+	sta RESP0,x              ; 21/ 26/31/36/41/46/51/56/61/66/71
+								; Set the rough position.
+	
 	lda		#BunnyHeight-1
 	dcp		B1_Draw
 	bcs		DoDrawP2
@@ -299,10 +366,17 @@ DoDrawP1
 DoDrawP2
 	lda		(B1_SprtPtr),y
 	sta 	WSYNC
+	sta 	HMOVE
 ; Line 2 ----------------------------------------------
-	sta		GRP1
-	ldx		#0
-	stx		PF0
+	;sta		GRP1
+	;ldx		#0
+	;stx		PF0
+
+	;lda		B1_PosX
+	;ldx		#1
+	;jsr		PosObject
+
+	ldy		Workspace
 	dey
 	bpl		ScreenLoop
 
@@ -442,6 +516,58 @@ OverScanWait
 ; the graphics for Kynetics title 
 ; PlayfieldPal at https://alienbill.com/2600/playfieldpal.html
 ; to draw these things. Just rename them left and right
+
+;Subroutines
+
+; By R. Mundschau (https://www.randomterrain.com/atari-2600-memories-tutorial-andrew-davie-24.html)
+; Positions an object horizontally
+; Inputs: A = Desired position.
+; X = Desired object to be positioned (0-5).
+; scanlines: If control comes on or before cycle 73 then 1 scanline is consumed.
+; If control comes after cycle 73 then 2 scanlines are consumed.
+; Outputs: X = unchanged
+; A = Fine Adjustment value.
+; Y = the "remainder" of the division by 15 minus an additional 15.
+PosObject   SUBROUTINE
+	sec                      ; 02     Set the carry flag so no borrow will be
+								;        applied during the division.
+
+divideby15 sbc #15                  ; 04     Waste the necessary amount of time
+								;        dividing X-pos by 15!
+
+	bcs divideby15          ; 06/07  11/16/21/26/31/36/41/46/51/56/61/66
+
+
+
+	tay
+
+	lda fineAdjustTable,y    ; 13 -> Consume 5 cycles by guaranteeing we
+								;       cross a page boundary
+
+	sta RESP0,x              ; 21/ 26/31/36/41/46/51/56/61/66/71
+								; Set the rough position.
+
+	rts
+
+PrePosObject   SUBROUTINE
+	sec                      ; 02     Set the carry flag so no borrow will be
+								;        applied during the division.
+
+divideby152 sbc #15                  ; 04     Waste the necessary amount of time
+								;        dividing X-pos by 15!
+
+	bcs divideby152          ; 06/07  11/16/21/26/31/36/41/46/51/56/61/66
+
+
+
+	tay
+
+	lda fineAdjustTable,y    ; 13 -> Consume 5 cycles by guaranteeing we
+								;       cross a page boundary
+
+	sta HMP0,x
+
+	rts
 
 ;Sprites
 BunnySprite:
