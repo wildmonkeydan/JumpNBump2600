@@ -7,13 +7,13 @@
 
 ; CONSTANTS
 
-NTSC = 1
+NTSC = 0
 
 	IF NTSC
-BKCOL = 79
-P2BCOL = $FE
+BKCOL = #79
+P2BCOL = #1
 	ELSE
-BKCOL = #154
+BKCOL = #158
 P2BCOL = $28
 	ENDIF
 
@@ -38,7 +38,7 @@ BunnyJoyMask	= %00000001
 BunnyDeathMask	= %00000010
 
 ; Bunny Consts
-JumpForce		= 64
+JumpForce		= #64
 GravityForce	= %11111100	;-12
 
 	seg.u	   	RAM
@@ -126,14 +126,14 @@ Start
 	;sta 	COLUPF  			;set playfield colour
 	lda 	P1BCOL
 	sta 	COLUP0				;set player0 colour
-	lda 	P2BCOL
+	lda 	$22
 	sta 	COLUP1				;set player1 colour
 	lda		#40
 	sta		B0_PosX
-	lda 	#40
 	sta		B0_PosY
-	;sta		RESP0
-	;sta		RESP1
+	sta 	B1_PosY
+	lda 	#48
+	sta		B1_PosX
 
 ;MainLoop starts with usual VBLANK code,
 ;and the usual timer seeding
@@ -158,16 +158,12 @@ Joystick1Shifting
 	sta 	Joystick
 
 ReadJoystick1Button
-	lda		INPT4-$30
-	and    	NegativeMask
-    cmp   	Button
+	lda		INPT4
     sta    	Button
 	jmp		CalculateVelocity
 
 ReadJoystick2Button
-	lda		INPT5-$30
-	and    	NegativeMask
-    cmp   	Button
+	lda		INPT5
     sta    	Button
 
 CalculateVelocity
@@ -191,18 +187,26 @@ CheckRight
 	lsr
 	lsr
 	lsr
-	bcs 	CheckButton
+	bcs 	AdjustPos
 
 	iny							;x++
 
+AdjustPos
+	sty		B0_PosX,x			;store modified x coord
+	lda		B0_PosX,x
+	cmp		#169
+	bcc		CheckButton
+
+	lda		#168
+	sta		B0_PosX,x
+
 CheckButton
-	sty		B0_PosX,x		;store modified x coord
 	lda 	#0
 	cmp 	Button
-	beq		ApplyVelocity		;check if button pressed
+	bne		ApplyVelocity		;check if button pressed
 
 	lda		B0_VelY,x
-	adc		JumpForce
+	;adc		#64
 	sta		B0_VelY,x
 
 ApplyVelocity
@@ -275,10 +279,18 @@ PrepDraw
 	lda		B0_PosX
 	ldx		#0
 	jsr		PrePosObject
+	;sta		WSYNC
+	lda		B0_PosX
+	jsr		PosObject
 
-	lda		B0_PosY
-	inx
+	lda		B1_PosX
+	ldx		#1
 	jsr		PrePosObject
+	;sta		WSYNC
+	lda		B1_PosX
+	jsr		PosObject
+	sta		WSYNC
+	sta		HMOVE
 
 WaitForVblankEnd
 	lda 	#0
@@ -286,27 +298,6 @@ WaitForVblankEnd
 	lda 	INTIM	
 	bne 	WaitForVblankEnd	
 	sta 	VBLANK  	
-
-
-;so, scanlines. We have three loops; 
-;TitlePreLoop , TitleShowLoop, TitlePostLoop
-;
-; I found that if the 3 add up to 174 WSYNCS,
-; you should get the desired 262 lines per frame
-;
-; The trick is, the middle loop is 
-; how many pixels are in the playfield,
-; times how many scanlines you want per "big" letter pixel 
-
-pixelHeightOfTitle = #6
-scanlinesPerTitlePixel = #6
-
-; ok, that's a weird place to define constants, but whatever
-
-
-;just burning scanlines....you could do something else
-	;sta 	RESP0
-	;sta 	RESP1
 
 	IF NTSC
 
@@ -320,11 +311,11 @@ PALSky
 
 	ENDIF
 
-	ldx 	#0
 
 	ldy 	#98
 ScreenLoop
-	lda 	BunnyHeight-1
+	ldx 	#0
+	lda 	#BunnyHeight-1
 	dcp		B0_Draw
 	bcs		DoDrawP1
 	lda		#0
@@ -333,30 +324,12 @@ ScreenLoop
 DoDrawP1
 	lda		(B0_SprtPtr),y
 	sta 	WSYNC
-	;sta		HMOVE
+	;sta		VDELP0
 ; Line 1 ----------------------------------------------
-	sta		GRP0
-	;ldx		%11111111
-	;stx		PF0
+	sta		GRP0				;3
+	lda		LevelNormal,y		;4
+	sta		PF0
 
-	sty		Workspace
-	lda		B0_PosX
-	;ldx		#0
-	sec                      ; 02     Set the carry flag so no borrow will be
-								;        applied during the division.
-
-divideby15a sbc #15                  ; 04     Waste the necessary amount of time
-								;        dividing X-pos by 15!
-
-	bcs divideby15a          ; 06/07  11/16/21/26/31/36/41/46/51/56/61/66
-	tay
-
-	lda fineAdjustTable,y    ; 13 -> Consume 5 cycles by guaranteeing we
-								;       cross a page boundary
-
-	sta RESP0,x              ; 21/ 26/31/36/41/46/51/56/61/66/71
-								; Set the rough position.
-	
 	lda		#BunnyHeight-1
 	dcp		B1_Draw
 	bcs		DoDrawP2
@@ -366,121 +339,20 @@ divideby15a sbc #15                  ; 04     Waste the necessary amount of time
 DoDrawP2
 	lda		(B1_SprtPtr),y
 	sta 	WSYNC
-	sta 	HMOVE
 ; Line 2 ----------------------------------------------
-	;sta		GRP1
+	sta		GRP1
 	;ldx		#0
 	;stx		PF0
 
-	;lda		B1_PosX
-	;ldx		#1
-	;jsr		PosObject
+	tya
+	lsr
+	lsr
+	lsr
+	adc		#$92
+	sta		COLUBK
 
-	ldy		Workspace
 	dey
 	bpl		ScreenLoop
-
-; /* TitlePreLoop
-; ; we color the pre title area
-; 	sta WSYNC
-; 	lda		BunnySprite,x
-; 	sta		GRP0
-; 	;stx COLUBK
-; 	inx 	
-; 	dey
-; 	bne TitlePreLoop
-
-
-; 	;lda #00 		; reset background color
-; 	;sta COLUBK
-; 	sta WSYNC 		; create some padding
-; 	sta WSYNC
-; 	sta WSYNC
-
-
-; ;
-; ;the next part is careful cycle counting from those 
-; ;who have gone before me....
-	
-; ; Ball code
-; 	lda #150			; set ball color
-; 	sta COLUPF 
-; 	lda #%0101000		; set ball stretch
-; 	sta CTRLPF
-
-; 	lda #%00000010		; enable the ball
-; 	sta ENABL
-; 	sta WSYNC 			; not elegan to set the ball thinkness :)
-; 	sta WSYNC
-; 	sta WSYNC
-
-; ; move the ball!
-; 	lda #10
-; 	ldx #4 				; Ball sprite id for SetHozPos subroutine
-; 	jsr SetHorizPos
-; 	sta WSYNC
-; 	sta HMOVE
-; 	sleep 15
-; 	lda #%00000000		; disable the ball 
-; 	sta ENABL
-
-; 	ldx #pixelHeightOfTitle ; X will hold what letter pixel we're on
-; 	ldy #scanlinesPerTitlePixel ; Y will hold which scan line we're on for each pixel
-
-; 	lda #45   
-; 	sta COLUPF 
-
-; TitleShowLoop	
-; 	sta WSYNC
-; 	lda PFData0Left-1,X           ;[0]+4
-; 	sta PF0                 ;[4]+3 = *7*   < 23	;PF0 visible
-; 	lda PFData1Left-1,X           ;[7]+4
-; 	sta PF1                 ;[11]+3 = *14*  < 29	;PF1 visible
-; 	lda PFData2Left-1,X           ;[14]+4
-; 	sta PF2                 ;[18]+3 = *21*  < 40	;PF2 visible
-; 	nop			;[21]+2
-; 	nop			;[23]+2
-; 	nop			;[25]+2
-; 	;six cycles available  Might be able to do something here
-; 	lda PFData0Right-1,X          ;[27]+4
-; 	;PF0 no longer visible, safe to rewrite
-; 	sta PF0                 ;[31]+3 = *34* 
-; 	lda PFData1Right-1,X		;[34]+4
-; 	;PF1 no longer visible, safe to rewrite
-; 	sta PF1			;[38]+3 = *41*  
-; 	lda PFData2Right-1,X		;[41]+4
-; 	;PF2 rewrite must begin at exactly cycle 45!!, no more, no less
-; 	sta PF2			;[45]+2 = *47*  ; >
-	 
-; 	dey ;ok, we've drawn one more scaneline for this 'pixel'
-; 	bne NotChangingWhatTitlePixel ;go to not changing if we still have more to do for this pixel
-; 	dex ; we *are* changing what title pixel we're on...
-
-; 	beq DoneWithTitle ; ...unless we're done, of course
-	
-; 	ldy #scanlinesPerTitlePixel ;...so load up Y with the count of how many scanlines for THIS pixel...
-
-; NotChangingWhatTitlePixel
-	
-; 	jmp TitleShowLoop
-
-; DoneWithTitle	
-	
-; 	;clear out the playfield registers for obvious reasons	
-; 	lda #0
-; 	sta PF2 ;clear out PF2 first, I found out through experience
-; 	sta PF0
-; 	sta PF1
-
-; ;just burning scanlines....you could do something else
-; 	ldy #137
-; 	ldx #100 		; 40 + 60 (pretitle lines) so we start from the last color
-; TitlePostLoop
-; 	sta WSYNC
-; 	stx COLUBK
-; 	inx 
-; 	dey
-; 	bne TitlePostLoop
 
  ; usual vblank
  	lda #2		
@@ -488,34 +360,13 @@ DoDrawP2
  	ldx #30		
  	lda #0
  	sta CurrentBunny
- 	lda #157
+ 	lda #158
  	sta COLUBK
 OverScanWait
 	sta 	WSYNC
 	dex
 	bne	 OverScanWait
 	jmp  MainLoop      
-
-; ; Subroutine to move horizontally a sprite  
-; SetHorizPos 
-; 	sta WSYNC		; start a new line
-; 	bit 0
-; 	bit 0			; waste 6 cycles for tuning object speed
-; 	sec				; set carry flag
-; DivideLoop
-; 	sbc #50			; this value determines the direction of motion, 35 is steady
-; 	bcs DivideLoop	; branch until negative
-; 	eor #7			; calculate fine offset
-; 	asl
-; 	asl
-; 	asl
-; 	asl
-; 	sta HMP0,x	; set fine offset
-; 	rts		; return to calle
-;
-; the graphics for Kynetics title 
-; PlayfieldPal at https://alienbill.com/2600/playfieldpal.html
-; to draw these things. Just rename them left and right
 
 ;Subroutines
 
@@ -529,43 +380,35 @@ OverScanWait
 ; A = Fine Adjustment value.
 ; Y = the "remainder" of the division by 15 minus an additional 15.
 PosObject   SUBROUTINE
+	sta		WSYNC
 	sec                      ; 02     Set the carry flag so no borrow will be
 								;        applied during the division.
 
-divideby15 sbc #15                  ; 04     Waste the necessary amount of time
+divideby15 
+	sbc 	#15                 ; 04     Waste the necessary amount of time
 								;        dividing X-pos by 15!
-
-	bcs divideby15          ; 06/07  11/16/21/26/31/36/41/46/51/56/61/66
-
-
+	bcs 	divideby15          ; 06/07  11/16/21/26/31/36/41/46/51/56/61/66
 
 	tay
-
-	lda fineAdjustTable,y    ; 13 -> Consume 5 cycles by guaranteeing we
+	lda 	fineAdjustTable,y    ; 13 -> Consume 5 cycles by guaranteeing we
 								;       cross a page boundary
-
-	sta RESP0,x              ; 21/ 26/31/36/41/46/51/56/61/66/71
+	sta 	RESP0,x              ; 21/ 26/31/36/41/46/51/56/61/66/71
 								; Set the rough position.
-
 	rts
 
 PrePosObject   SUBROUTINE
 	sec                      ; 02     Set the carry flag so no borrow will be
 								;        applied during the division.
 
-divideby152 sbc #15                  ; 04     Waste the necessary amount of time
+divideby152 
+	sbc 	#15                  ; 04     Waste the necessary amount of time
 								;        dividing X-pos by 15!
-
-	bcs divideby152          ; 06/07  11/16/21/26/31/36/41/46/51/56/61/66
-
-
+	bcs 	divideby152          ; 06/07  11/16/21/26/31/36/41/46/51/56/61/66
 
 	tay
-
-	lda fineAdjustTable,y    ; 13 -> Consume 5 cycles by guaranteeing we
+	lda 	fineAdjustTable,y    ; 13 -> Consume 5 cycles by guaranteeing we
 								;       cross a page boundary
-
-	sta HMP0,x
+	sta 	HMP0,x
 
 	rts
 
@@ -579,69 +422,109 @@ BunnySprite:
 	.byte %01111000 ;
 	.byte %00011100 ;
 	.byte %00001100 ;
-; --- end ----
 BunnyHeight		= * - BunnySprite
 
-PFData0Left
-        .byte #%00000000
-        .byte #%10000000
-        .byte #%10000000
-        .byte #%10000000
-        .byte #%10000000
-        .byte #%10000000
-        .byte #%00000000
-        .byte #%00000000
+;Levels
 
-PFData1Left
-        .byte #%00000000
-        .byte #%00100100
-        .byte #%00100100
-        .byte #%11000000
-        .byte #%10001110
-        .byte #%00101010
-        .byte #%00000000
-        .byte #%00000000
-
-PFData2Left
-        .byte %01111110 ;
-		.byte %00101111 ;
-		.byte %00111110 ;
-		.byte %11111100 ;
-		.byte %10110000 ;
-		.byte %01111000 ;
-		.byte %00011100 ;
-		.byte %00001100 
-
-PFData0Right
-        .byte #%00000000
-        .byte #%00100000
-        .byte #%00100000
-        .byte #%00100000
-        .byte #%00000000
-        .byte #%01110000
-        .byte #%00000000
-        .byte #%00000000
-
-PFData1Right
-        .byte #%00000000
-        .byte #%10011001
-        .byte #%10100100
-        .byte #%10100000
-        .byte #%00100101
-        .byte #%10011000
-        .byte #%00000000
-        .byte #%00000000
-
-PFData2Right
-        .byte #%00000000
-        .byte #%00000011
-        .byte #%00000100
-        .byte #%00000011
-        .byte #%00000000
-        .byte #%00000111
-        .byte #%00000000
-        .byte #%00000000
-
+;Normal
+; mode: asymmetric repeat line-height 2
+LevelNormal:
+	.byte $F0,$80,$00,$00,$00,$00 ;|XXXXX               ||                    | ( 0)
+	.byte $F0,$80,$00,$00,$00,$00 ;|XXXXX               ||                    | ( 1)
+	.byte $F0,$80,$00,$00,$00,$00 ;|XXXXX               ||                    | ( 2)
+	.byte $F0,$80,$00,$00,$00,$00 ;|XXXXX               ||                    | ( 3)
+	.byte $F0,$00,$00,$00,$01,$07 ;|XXXX                ||           XXXX     | ( 4)
+	.byte $70,$00,$00,$E0,$01,$07 ;|XXX                 || XXX       XXXX     | ( 5)
+	.byte $70,$00,$00,$E0,$01,$07 ;|XXX                 || XXX       XXXX     | ( 6)
+	.byte $30,$00,$00,$E0,$01,$07 ;|XX                  || XXX       XXXX     | ( 7)
+	.byte $30,$00,$00,$E0,$01,$03 ;|XX                  || XXX       XXX      | ( 8)
+	.byte $30,$00,$00,$E0,$C0,$03 ;|XX                  || XXXXX      XX      | ( 9)
+	.byte $30,$00,$00,$E0,$C0,$00 ;|XX                  || XXXXX              | (10)
+	.byte $30,$00,$80,$F0,$C0,$00 ;|XX                 X||XXXXXX              | (11)
+	.byte $30,$00,$80,$F0,$C0,$00 ;|XX                 X||XXXXXX              | (12)
+	.byte $30,$00,$80,$F0,$F8,$00 ;|XX                 X||XXXXXXXXX           | (13)
+	.byte $30,$00,$80,$F0,$F8,$00 ;|XX                 X||XXXXXXXXX           | (14)
+	.byte $30,$00,$E0,$F0,$F8,$00 ;|XX               XXX||XXXXXXXXX           | (15)
+	.byte $30,$00,$E0,$F0,$F8,$00 ;|XX               XXX||XXXXXXXXX           | (16)
+	.byte $30,$00,$E0,$F0,$F8,$F8 ;|XX               XXX||XXXXXXXXX      XXXXX| (17)
+	.byte $70,$00,$E0,$F0,$F8,$F8 ;|XXX              XXX||XXXXXXXXX      XXXXX| (18)
+	.byte $70,$00,$F0,$F0,$F0,$F8 ;|XXX             XXXX||XXXXXXXX       XXXXX| (19)
+	.byte $70,$00,$FF,$F0,$F0,$F8 ;|XXX         XXXXXXXX||XXXXXXXX       XXXXX| (20)
+	.byte $F0,$80,$FF,$F0,$E0,$F8 ;|XXXXX       XXXXXXXX||XXXXXXX        XXXXX| (21)
+	.byte $F0,$80,$FF,$F0,$C0,$F8 ;|XXXXX       XXXXXXXX||XXXXXX         XXXXX| (22)
+	.byte $F0,$80,$FF,$F0,$C0,$F8 ;|XXXXX       XXXXXXXX||XXXXXX         XXXXX| (23)
+	.byte $F0,$80,$FE,$F0,$C0,$F0 ;|XXXXX        XXXXXXX||XXXXXX          XXXX| (24)
+	.byte $F0,$80,$FE,$F0,$80,$E0 ;|XXXXX        XXXXXXX||XXXXX            XXX| (25)
+	.byte $F0,$80,$F0,$F0,$80,$E0 ;|XXXXX           XXXX||XXXXX            XXX| (26)
+	.byte $70,$00,$F0,$F0,$00,$E0 ;|XXX             XXXX||XXXX             XXX| (27)
+	.byte $70,$00,$F0,$F0,$00,$E0 ;|XXX             XXXX||XXXX             XXX| (28)
+	.byte $30,$00,$F0,$30,$00,$E0 ;|XX              XXXX||XX               XXX| (29)
+	.byte $30,$00,$E0,$10,$00,$E0 ;|XX               XXX||X                XXX| (30)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (31)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (32)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (33)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (34)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (35)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (36)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (37)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (38)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (39)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (40)
+	.byte $30,$00,$00,$00,$00,$FC ;|XX                  ||              XXXXXX| (41)
+	.byte $30,$00,$00,$00,$00,$FC ;|XX                  ||              XXXXXX| (42)
+	.byte $30,$00,$00,$00,$00,$FC ;|XX                  ||              XXXXXX| (43)
+	.byte $F0,$F8,$1F,$00,$00,$FC ;|XXXXXXXXX   XXXXX   ||              XXXXXX| (44)
+	.byte $F0,$F8,$1F,$00,$00,$FC ;|XXXXXXXXX   XXXXX   ||              XXXXXX| (45)
+	.byte $F0,$F8,$1F,$00,$00,$FC ;|XXXXXXXXX   XXXXX   ||              XXXXXX| (46)
+	.byte $F0,$F8,$0E,$00,$00,$FC ;|XXXXXXXXX    XXX    ||              XXXXXX| (47)
+	.byte $F0,$F8,$0E,$00,$E0,$FC ;|XXXXXXXXX    XXX    ||    XXX       XXXXXX| (48)
+	.byte $F0,$E0,$06,$00,$E0,$F8 ;|XXXXXXX      XX     ||    XXX        XXXXX| (49)
+	.byte $F0,$E0,$00,$00,$E0,$F8 ;|XXXXXXX             ||    XXX        XXXXX| (50)
+	.byte $F0,$C0,$00,$00,$E0,$F8 ;|XXXXXX              ||    XXX        XXXXX| (51)
+	.byte $F0,$00,$00,$00,$E0,$F8 ;|XXXX                ||    XXX        XXXXX| (52)
+	.byte $30,$00,$00,$00,$E0,$F0 ;|XX                  ||    XXX         XXXX| (53)
+	.byte $30,$00,$00,$00,$E0,$E0 ;|XX                  ||    XXX          XXX| (54)
+	.byte $30,$00,$00,$80,$E0,$E0 ;|XX                  ||   XXXX          XXX| (55)
+	.byte $30,$00,$00,$80,$E0,$E0 ;|XX                  ||   XXXX          XXX| (56)
+	.byte $30,$00,$00,$F0,$E0,$E0 ;|XX                  ||XXXXXXX          XXX| (57)
+	.byte $30,$00,$00,$F0,$E0,$E0 ;|XX                  ||XXXXXXX          XXX| (58)
+	.byte $30,$00,$00,$F0,$E0,$E0 ;|XX                  ||XXXXXXX          XXX| (59)
+	.byte $30,$00,$00,$F0,$F8,$E0 ;|XX                  ||XXXXXXXXX        XXX| (60)
+	.byte $30,$00,$00,$F0,$FF,$E0 ;|XX                  ||XXXXXXXXXXXX     XXX| (61)
+	.byte $30,$00,$00,$F0,$FF,$E0 ;|XX                  ||XXXXXXXXXXXX     XXX| (62)
+	.byte $30,$00,$E0,$F0,$FF,$E0 ;|XX               XXX||XXXXXXXXXXXX     XXX| (63)
+	.byte $30,$1F,$E1,$F0,$FF,$E0 ;|XX     XXXXXX    XXX||XXXXXXXXXXXX     XXX| (64)
+	.byte $30,$1F,$E1,$F0,$FF,$E0 ;|XX     XXXXXX    XXX||XXXXXXXXXXXX     XXX| (65)
+	.byte $30,$1F,$C1,$F0,$FE,$E0 ;|XX     XXXXXX     XX||XXXXXXXXXXX      XXX| (66)
+	.byte $30,$1F,$C1,$F0,$FC,$E0 ;|XX     XXXXXX     XX||XXXXXXXXXX       XXX| (67)
+	.byte $30,$0E,$C0,$F0,$F8,$E0 ;|XX      XXX       XX||XXXXXXXXX        XXX| (68)
+	.byte $30,$00,$80,$F0,$F0,$E0 ;|XX                 X||XXXXXXXX         XXX| (69)
+	.byte $30,$00,$00,$F0,$80,$E0 ;|XX                  ||XXXXX            XXX| (70)
+	.byte $30,$00,$00,$60,$00,$E0 ;|XX                  || XX              XXX| (71)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (72)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (73)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (74)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (75)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (76)
+	.byte $30,$00,$00,$00,$00,$E0 ;|XX                  ||                 XXX| (77)
+	.byte $F0,$80,$00,$00,$00,$E0 ;|XXXXX               ||                 XXX| (78)
+	.byte $F0,$80,$00,$00,$00,$E0 ;|XXXXX               ||                 XXX| (79)
+	.byte $F0,$80,$00,$00,$00,$E0 ;|XXXXX               ||                 XXX| (80)
+	.byte $F0,$80,$00,$00,$00,$E0 ;|XXXXX               ||                 XXX| (81)
+	.byte $F0,$80,$00,$00,$00,$E0 ;|XXXXX               ||                 XXX| (82)
+	.byte $F0,$80,$07,$00,$00,$E0 ;|XXXXX       XXX     ||                 XXX| (83)
+	.byte $F0,$00,$07,$00,$00,$E0 ;|XXXX        XXX     ||                 XXX| (84)
+	.byte $70,$00,$07,$00,$00,$E0 ;|XXX         XXX     ||                 XXX| (85)
+	.byte $30,$00,$07,$00,$00,$E0 ;|XX          XXX     ||                 XXX| (86)
+	.byte $30,$00,$FF,$F0,$FF,$FF ;|XX          XXXXXXXX||XXXXXXXXXXXXXXXXXXXX| (87)
+	.byte $30,$00,$FF,$F0,$FF,$FF ;|XX          XXXXXXXX||XXXXXXXXXXXXXXXXXXXX| (88)
+	.byte $30,$00,$FF,$F0,$FF,$FF ;|XX          XXXXXXXX||XXXXXXXXXXXXXXXXXXXX| (89)
+	.byte $30,$00,$FF,$F0,$FF,$FF ;|XX          XXXXXXXX||XXXXXXXXXXXXXXXXXXXX| (90)
+	.byte $30,$00,$FF,$F0,$FF,$FF ;|XX          XXXXXXXX||XXXXXXXXXXXXXXXXXXXX| (91)
+	.byte $30,$00,$FF,$F0,$FF,$FF ;|XX          XXXXXXXX||XXXXXXXXXXXXXXXXXXXX| (92)
+	.byte $F0,$FF,$FF,$F0,$FF,$FF ;|XXXXXXXXXXXXXXXXXXXX||XXXXXXXXXXXXXXXXXXXX| (93)
+	.byte $F0,$FF,$FF,$F0,$FF,$FF ;|XXXXXXXXXXXXXXXXXXXX||XXXXXXXXXXXXXXXXXXXX| (94)
+	.byte $F0,$FF,$FF,$F0,$FF,$FF ;|XXXXXXXXXXXXXXXXXXXX||XXXXXXXXXXXXXXXXXXXX| (95)
 
 	org $FFFA
 	.word Start
