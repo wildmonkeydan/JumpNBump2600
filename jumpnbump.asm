@@ -7,10 +7,10 @@
 
 ; CONSTANTS
 
-NTSC = 1
+NTSC = 0
 
 	IF NTSC
-BKCOL = #79
+BKCOL = #$9C
 P2BCOL = #1
 	ELSE
 BKCOL = #158
@@ -112,7 +112,8 @@ fineAdjustTable EQU fineAdjustBegin - %11110001; NOTE: %11110001 = -15
 Start
 	CLEAN_START
 
-	lda 	BKCOL
+	IF NTSC
+	lda 	#$9C
 	sta 	COLUBK  			;set blackground 	
 	lda 	P1BCOL
 	sta 	COLUP0				;set player0 colour
@@ -120,6 +121,17 @@ Start
 	sta 	COLUP1				;set player1 colour
 	lda 	#$C2
 	sta		COLUPF
+	ELSE
+	lda 	#$9A
+	sta 	COLUBK  			;set blackground 	
+	lda 	P1BCOL
+	sta 	COLUP0				;set player0 colour
+	lda 	#$2A
+	sta 	COLUP1				;set player1 colour
+	lda 	#$36
+	sta		COLUPF
+	ENDIF
+
 	lda		#40
 	sta		B0_PosX
 	sta		B0_PosY
@@ -228,7 +240,7 @@ NegativeVelocity
 
 	ldx		CurrentBunny
 	lda		B0_PosY,x
-	sbc		Workspace
+	;sbc		Workspace
 	sta		B0_PosY,x
 
 CollisionCheck
@@ -291,16 +303,12 @@ WaitForVblankEnd
 	bne 	WaitForVblankEnd	
 	;lda		#%00000010
 	sta 	VBLANK  
-	sta		WSYNC	
-	sta		WSYNC	
-	sta		WSYNC	
-	sta		WSYNC	
-	sta		WSYNC	
-	sta		WSYNC	
-	sta		WSYNC	
-	sta		WSYNC	
-	sta		WSYNC	
-	;sta		WSYNC				
+	
+	ldx		#9
+Sky
+	sta WSYNC
+	dex
+	bne Sky
 
 	IF NTSC
 
@@ -320,7 +328,64 @@ PALSky
 	sta 	WSYNC
 
 BeginScreenLoop
+	lda 	#BunnyHeight-1
+	dcp		B0_Draw
+	bcs		DoDrawP1B
+	lda		#0
+	.byte 	$2C
 
+DoDrawP1B
+	lda		(B0_SprtPtr),y
+	;nop
+	sta 	WSYNC
+	;sta		VDELP0
+; Line 1 ----------------------------------------------
+	sta		GRP0					;3
+	lda		LvlNormalDataPF0,x		;4
+	sta		PF0						;3
+	lda		LvlNormalDataPF1,x		;4
+	sta		PF1						;3
+	lda		LvlNormalDataPF2,x		;4
+	sta		PF2						;3 (24)
+	sta		Workspace				;3
+	lda		LvlNormalDataPF0+1,x	;4
+	sta		PF0						;3
+	lda		LvlNormalDataPF1+1,x	;4
+	sta		PF1						;3
+	lda		LvlNormalDataPF2+1,x	;4
+	sta		PF2						;3
+
+
+	;dex
+	lda		#BunnyHeight-1
+	dcp		B1_Draw
+	bcs		DoDrawP2B
+	lda		#0
+	.byte	$2C
+
+DoDrawP2B
+	lda		(B1_SprtPtr),y
+	sta 	WSYNC
+; Line 2 ----------------------------------------------
+	sta		GRP1					;3
+	lda		LvlNormalDataPF0,x		;4
+	sta		PF0						;3
+	lda		LvlNormalDataPF1,x		;4
+	sta		PF1						;3
+	lda		LvlNormalDataPF2,x		;4
+	sta		PF2						;3 (24)
+	sta		Workspace				;3 (27)
+	lda		LvlNormalDataPF0+1,x	;4
+	sta		PF0						;3
+	lda		LvlNormalDataPF1+1,x	;4
+	sta		PF1						;3
+	lda		LvlNormalDataPF2+1,x	;4
+	sta		PF2						;3
+
+	inx
+	inx
+	dey
+	;bpl		ScreenLoop
 
 ScreenLoop
 	lda 	#BunnyHeight-1
@@ -331,6 +396,7 @@ ScreenLoop
 
 DoDrawP1
 	lda		(B0_SprtPtr),y
+	nop
 	nop
 	;sta 	WSYNC
 	;sta		VDELP0
@@ -384,13 +450,22 @@ DoDrawP2
 
  ; usual vblank
 	sta 	WSYNC
- 	lda #2		
- 	sta VBLANK 	
- 	ldx #30		
- 	lda #0
- 	sta CurrentBunny
- 	lda #158
- 	sta COLUBK
+	lda		#0
+	sta		PF0
+	sta		PF1
+	sta		PF2
+	sta 	WSYNC
+	sta 	WSYNC
+	sta 	WSYNC
+	sta 	WSYNC
+	sta 	WSYNC
+ 	lda 	#2		
+ 	sta 	VBLANK 	
+ 	ldx 	#30		
+ 	lda 	#0
+ 	sta 	CurrentBunny
+ 	;lda 	BKCOL
+ 	;sta 	COLUBK
 OverScanWait
 	sta 	WSYNC
 	dex
@@ -459,6 +534,7 @@ BunnyHeight		= * - BunnySprite
 ; mode: asymmetric repeat line-height 2
 
 LvlNormalDataPF0:
+	.byte $00,$00,$00,$00,$00,$00,$00,$00
 	.byte $F0,$00,$F0,$00,$F0,$00,$F0,$00
 	.byte $F0,$00,$70,$E0,$70,$E0,$30,$E0
 	.byte $30,$E0,$30,$E0,$30,$E0,$30,$F0
@@ -484,6 +560,7 @@ LvlNormalDataPF0:
 	.byte $30,$F0,$30,$F0,$30,$F0,$30,$F0
 	.byte $30,$F0,$F0,$F0,$F0,$F0,$F0,$F0
 LvlNormalDataPF1:
+	.byte $00,$00,$00,$00,$00,$00,$00,$00
 	.byte $80,$00,$80,$00,$80,$00,$80,$00
 	.byte $00,$01,$00,$01,$00,$01,$00,$01
 	.byte $00,$01,$00,$C0,$00,$C0,$00,$C0
@@ -509,6 +586,7 @@ LvlNormalDataPF1:
 	.byte $00,$FF,$00,$FF,$00,$FF,$00,$FF
 	.byte $00,$FF,$FF,$FF,$FF,$FF,$FF,$FF
 LvlNormalDataPF2:
+	.byte $00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$07,$00,$07,$00,$07,$00,$07
 	.byte $00,$03,$00,$03,$00,$00,$80,$00
